@@ -1,14 +1,14 @@
-const CACHE = 'areen-sales-v1';
+const CACHE = 'areen-sales-v1.1';
 const ASSETS = [
   './',
   './index.html',
-  './css/styles.css',
-  './js/app.js',
-  './js/firebase.js',
-  './js/i18n.js',
-  './assets/areen-logo.jpg',
-  './assets/icon-192.png',
-  './assets/icon-512.png',
+  './styles.css',
+  './app.js',
+  './firebase.js',
+  './i18n.js',
+  './areen-logo.jpg',
+  './icon-192.png',
+  './icon-512.png',
   './manifest.webmanifest'
 ];
 
@@ -26,7 +26,20 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+
+  // Never cache Firebase/CDN traffic here.
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).catch(() => cached))
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

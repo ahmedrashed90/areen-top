@@ -27,7 +27,7 @@
 
 `areen-5b706`
 
-الملف: `js/firebase.js`
+الملف: `firebase.js`
 
 ## إعداد Firebase لأول مرة
 
@@ -110,7 +110,7 @@ python3 -m http.server 8080
 
 المشروع Static ويمكن نشره على Vercel / Firebase Hosting / Netlify أو أي استضافة HTTPS.
 
-إذا استخدمت Vercel، ارفع محتويات المجلد كما هي ولا تحتاج Build Command.
+إذا استخدمت Vercel، ارفع **كل الملفات الموجودة في هذا المجلد إلى جذر Repository نفسه**، وليس ملف ZIP وحده ولا بعض الملفات فقط. هذه النسخة مسطحة (Flat) عمدًا حتى لا تضيع مجلدات `css/js/assets` أثناء الرفع من واجهة GitHub. لا تحتاج Build Command.
 
 ## Excel - العملاء
 

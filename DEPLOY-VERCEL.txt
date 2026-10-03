@@ -1,0 +1,23 @@
+AREEN - Vercel deployment
+==========================
+
+IMPORTANT:
+Upload ALL files in this folder to the ROOT of the GitHub repository.
+Do not upload only index.html / README / firestore.rules.
+Do not upload the ZIP as a file and expect Vercel to extract it.
+
+The root of the repository must visibly contain at least:
+index.html
+styles.css
+app.js
+firebase.js
+i18n.js
+areen-logo.jpg
+icon-192.png
+icon-512.png
+manifest.webmanifest
+service-worker.js
+vercel.json
+
+After Vercel redeploys, hard refresh the browser (Ctrl+F5).
+If an old service worker is still active, DevTools > Application > Service Workers > Unregister, then refresh once.
