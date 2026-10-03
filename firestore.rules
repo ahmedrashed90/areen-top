@@ -1,0 +1,178 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.token.email);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(userPath());
+    }
+
+    function profile() {
+      return get(userPath()).data;
+    }
+
+    function activeUser() {
+      return hasProfile() && profile().active == true;
+    }
+
+    function isManager() {
+      return activeUser() && profile().role == 'manager';
+    }
+
+    function isRepresentative() {
+      return activeUser() && profile().role == 'representative';
+    }
+
+    function representativeCode() {
+      return profile().representativeCode;
+    }
+
+    match /users/{email} {
+      allow read: if isManager() || (signedIn() && request.auth.token.email == email);
+
+      // One-time bootstrap for the first manager account created in Firebase Auth.
+      allow create: if (
+        signedIn() &&
+        request.auth.token.email == 'manager@areen.local' &&
+        email == 'manager@areen.local' &&
+        request.resource.data.role == 'manager' &&
+        request.resource.data.active == true &&
+        request.resource.data.uid == request.auth.uid
+      ) || isManager();
+
+      allow update, delete: if isManager();
+    }
+
+    match /sales_representatives/{repCode} {
+      allow read: if isManager() || (isRepresentative() && representativeCode() == repCode);
+      allow create, update, delete: if isManager();
+    }
+
+    match /regions/{regionCode} {
+      allow read: if activeUser();
+      allow create, update, delete: if isManager();
+    }
+
+    match /products/{productCode} {
+      allow read: if activeUser();
+      allow create, update, delete: if isManager();
+    }
+
+    match /monthly_targets/{targetCode} {
+      allow read: if isManager() || (isRepresentative() && resource.data.representativeCode == representativeCode());
+      allow create, update, delete: if isManager();
+    }
+
+    match /customers/{customerCode} {
+      function validRepresentativeSaleUpdate() {
+        let saleId = request.resource.data.lastSaleId;
+        let sale = getAfter(/databases/$(database)/documents/sales/$(saleId)).data;
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'currentBalance',
+          'totalWithdrawals',
+          'totalPaid',
+          'lastSaleDate',
+          'lastVisitDate',
+          'lastSaleId',
+          'updatedAt'
+        ]) &&
+        sale.customerCode == customerCode &&
+        sale.representativeCode == representativeCode() &&
+        sale.createdByEmail == request.auth.token.email &&
+        sale.previousBalance == resource.data.currentBalance &&
+        request.resource.data.currentBalance == resource.data.currentBalance + sale.total - sale.paidAmount &&
+        request.resource.data.totalWithdrawals == resource.data.totalWithdrawals + sale.total &&
+        request.resource.data.totalPaid == resource.data.totalPaid + sale.paidAmount;
+      }
+
+      allow read: if isManager() || (isRepresentative() && resource.data.representativeCode == representativeCode());
+
+      allow create: if isManager() || (
+        isRepresentative() &&
+        request.resource.data.representativeCode == representativeCode() &&
+        request.resource.data.createdByEmail == request.auth.token.email &&
+        request.resource.data.openingBalance == 0 &&
+        request.resource.data.currentBalance == 0 &&
+        request.resource.data.totalWithdrawals == 0 &&
+        request.resource.data.totalPaid == 0
+      );
+
+      allow update: if isManager() || (
+        isRepresentative() &&
+        resource.data.representativeCode == representativeCode() &&
+        request.resource.data.representativeCode == representativeCode() &&
+        validRepresentativeSaleUpdate()
+      );
+
+      allow delete: if isManager();
+    }
+
+    match /sales/{saleCode} {
+      allow read: if isManager() || (isRepresentative() && resource.data.representativeCode == representativeCode());
+
+      allow create: if isManager() || (
+        isRepresentative() &&
+        request.resource.data.representativeCode == representativeCode() &&
+        request.resource.data.createdByEmail == request.auth.token.email &&
+        request.resource.data.saleCode == saleCode &&
+        request.resource.data.total > 0 &&
+        request.resource.data.paidAmount >= 0 &&
+        request.resource.data.paidAmount <= request.resource.data.previousBalance + request.resource.data.total
+      );
+
+      allow update, delete: if isManager();
+    }
+
+    match /payments/{paymentCode} {
+      function salePaymentIsValid() {
+        let saleId = request.resource.data.saleId;
+        let sale = getAfter(/databases/$(database)/documents/sales/$(saleId)).data;
+        return request.resource.data.source == 'sale' &&
+          sale.saleCode == saleId &&
+          sale.customerCode == request.resource.data.customerCode &&
+          sale.representativeCode == representativeCode() &&
+          sale.createdByEmail == request.auth.token.email &&
+          request.resource.data.amount == sale.paidAmount;
+      }
+
+      allow read: if isManager() || (isRepresentative() && resource.data.representativeCode == representativeCode());
+      allow create: if isManager() || (
+        isRepresentative() &&
+        request.resource.data.representativeCode == representativeCode() &&
+        request.resource.data.createdByEmail == request.auth.token.email &&
+        request.resource.data.paymentCode == paymentCode &&
+        request.resource.data.amount > 0 &&
+        salePaymentIsValid()
+      );
+      allow update, delete: if isManager();
+    }
+
+    match /visits/{visitCode} {
+      function representativeSaleVisitIsValid() {
+        let saleId = request.resource.data.saleId;
+        let sale = getAfter(/databases/$(database)/documents/sales/$(saleId)).data;
+        return request.resource.data.visitType == 'sale' &&
+          sale.saleCode == saleId &&
+          sale.customerCode == request.resource.data.customerCode &&
+          sale.representativeCode == representativeCode() &&
+          sale.createdByEmail == request.auth.token.email;
+      }
+
+      allow read: if isManager() || (isRepresentative() && resource.data.representativeCode == representativeCode());
+      allow create: if isManager() || (
+        isRepresentative() &&
+        request.resource.data.representativeCode == representativeCode() &&
+        request.resource.data.createdByEmail == request.auth.token.email &&
+        request.resource.data.visitCode == visitCode &&
+        representativeSaleVisitIsValid()
+      );
+      allow update, delete: if isManager();
+    }
+  }
+}
